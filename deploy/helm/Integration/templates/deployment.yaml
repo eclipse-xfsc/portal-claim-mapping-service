@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ template "app.name" . }}"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.labels" . | nindent 8 }}
+      annotations:
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+{{- end }}
+    spec:
+      securityContext:
+      {{- include "app.securitycontext" . | nindent 8 }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        env:
+          {{- range $k, $v := .Values.config.tsaURLs }}
+          - name: "TSA_URL_{{ $k }}"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "app.fullname" $ }}
+                key: {{ $k | quote }}
+          {{ end }}
+          - name: "TOKEN_ROLES_PATH"
+            value: {{ .Values.config.tokenRolesPath }}
+          - name: "TOKEN_CONTEXT_PATH"
+            value: {{ .Values.config.tokenContextPath }}
+          - name: "IDENTITY_PROVIDER_OID_URL"
+            value: {{ .Values.config.identityProviderOidURL }}
+          - name: "DEFAULT_CLAIMS"
+            value: {{ .Values.config.defaultClaims | toJson | quote}}
+          - name: PORT
+            value: "{{ .Values.server.http.port }}"
+          - name: PG_DB
+            value: {{ .Values.postgres.database | quote }}
+          - name: PG_HOST
+            value: "{{ .Values.postgres.host.name }}"
+          - name: PG_PORT
+            value: "{{ .Values.postgres.host.port }}"
+          - name: PG_USER
+            valueFrom:
+              secretKeyRef:
+              {{- if and (.Values.postgres.passwordSecret) (.Values.postgres.usernameSecret) }}
+                name: {{ .Values.postgres.usernameSecret.name | quote }}
+                key: {{ .Values.postgres.usernameSecret.key | quote }}
+              {{- else }}
+                name: {{ include "app.fullname" . | quote }}
+                key: {{ "postgres-username" | quote }}
+              {{- end }}
+          - name: PG_PASSWORD
+            valueFrom:
+              secretKeyRef:
+              {{- if and (.Values.postgres.passwordSecret) (.Values.postgres.usernameSecret) }}
+                name: {{ .Values.postgres.passwordSecret.name | quote }}
+                key: {{ .Values.postgres.passwordSecret.key | quote }}
+              {{- else }}
+                name: {{ include "app.fullname" . | quote }}
+                key: {{ "postgres-password" | quote }}
+              {{- end }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.server.http.port }}
+        readinessProbe:
+          httpGet:
+            path: /isAlive
+            port: {{ .Values.server.http.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 2
+          failureThreshold: 2
+          timeoutSeconds: 5
+      {{- if .Values.resources }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      {{- end }}

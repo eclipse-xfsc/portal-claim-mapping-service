@@ -1,0 +1,13 @@
+apiVersion: v2
+appVersion: v1.0.0
+description: claim-mapping-service deployment
+name: claim-mapping-service
+version: 1.3.14
+
+dependencies:
+  - name: library
+    version: 1.0.0
+    repository: "https://gitlab.com/api/v4/projects/40471958/packages/helm/Integration/"
+  - name: postgresql-hook
+    version: 1.1.8
+    repository: "https://gitlab.com/api/v4/projects/40471958/packages/helm/Integration/"
